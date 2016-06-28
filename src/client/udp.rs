@@ -68,10 +68,12 @@ impl<'a> Client for UdpClient<'a> {
                 let line = line.as_bytes();
                 if line.len() + bytes.len() < MAX_UDP_PACKET_LEN {
                     bytes.extend_from_slice(&line[..]);
+                    bytes.push(b'\n');
                 } else {
                     try!(socket.send_to(&bytes[..], addr));
                     bytes.clear();
                     bytes.extend_from_slice(&line[..]);
+                    bytes.push(b'\n');
                 }
             }
             if !bytes.is_empty() {
