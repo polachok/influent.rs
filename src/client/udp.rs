@@ -52,10 +52,10 @@ impl<'a> Client for UdpClient<'a> {
     }
 
     fn write_one(&self, measurement: Measurement, precision: Option<Precision>) -> ClientWriteResult {
-        self.write_many(vec![measurement], precision)
+        self.write_many(&[measurement], precision)
     }
 
-    fn write_many(&self, measurements: Vec<Measurement>, _: Option<Precision>) -> ClientWriteResult {
+    fn write_many(&self, measurements: &[Measurement], _: Option<Precision>) -> ClientWriteResult {
         let socket = try!(UdpSocket::bind("0.0.0.0:0"));
         let addr = self.get_host().to_socket_addrs().unwrap().last().unwrap();
 

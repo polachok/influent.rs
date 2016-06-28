@@ -86,10 +86,10 @@ impl<'a> Client for HttpClient<'a> {
     }
 
     fn write_one(&self, measurement: Measurement, precision: Option<Precision>) -> ClientWriteResult {
-        self.write_many(vec![measurement], precision)
+        self.write_many(&[measurement], precision)
     }
 
-    fn write_many(&self, measurements: Vec<Measurement>, precision: Option<Precision>) -> ClientWriteResult {
+    fn write_many(&self, measurements: &[Measurement], precision: Option<Precision>) -> ClientWriteResult {
         let host = self.get_host();
 
         for chunk in measurements.chunks(self.max_batch as usize) {
