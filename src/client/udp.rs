@@ -1,7 +1,7 @@
 use ::measurement::Measurement;
 use ::serializer::Serializer;
 use ::client::{Precision, Client, Credentials, ClientError, ClientReadResult, ClientWriteResult};
-use std::net::{UdpSocket, ToSocketAddrs};
+use std::net::{UdpSocket, SocketAddr, ToSocketAddrs};
 
 const MAX_BATCH: u16 = 5000;
 
@@ -22,7 +22,9 @@ pub struct Options {
 pub struct UdpClient<'a> {
     serializer: Box<Serializer>,
     hosts: Vec<&'a str>,
-    pub max_batch: u16
+    hosts_addrs: Vec<SocketAddr>,
+    pub max_batch: u16,
+    socket: UdpSocket,
 }
 
 impl<'a> UdpClient<'a> {
@@ -30,12 +32,16 @@ impl<'a> UdpClient<'a> {
         UdpClient {
             serializer: serializer,
             hosts: vec![],
-            max_batch: MAX_BATCH
+            hosts_addrs: vec![],
+            max_batch: MAX_BATCH,
+            socket: UdpSocket::bind("0.0.0.0:0").unwrap(),
         }
     }
 
     pub fn add_host(&mut self, host: &'a str) {
         self.hosts.push(host);
+        let hosts_addrs = host.to_socket_addrs().unwrap().collect::<Vec<SocketAddr>>();
+        self.hosts_addrs.extend_from_slice(&hosts_addrs);
     }
 
     fn get_host(&self) -> &'a str {
@@ -56,8 +62,8 @@ impl<'a> Client for UdpClient<'a> {
     }
 
     fn write_many(&self, measurements: &[Measurement], _: Option<Precision>) -> ClientWriteResult {
-        let socket = try!(UdpSocket::bind("0.0.0.0:0"));
-        let addr = try!(self.get_host().to_socket_addrs()).last().unwrap();
+        let socket = &self.socket;
+        let addr = self.hosts_addrs.first().unwrap();
 
         for chunk in measurements.chunks(self.max_batch as usize) {
             let mut bytes = Vec::new();
@@ -66,18 +72,18 @@ impl<'a> Client for UdpClient<'a> {
             for measurement in chunk {
                 let line = self.serializer.serialize(measurement);
                 let line = line.as_bytes();
-                if line.len() + bytes.len() < MAX_UDP_PACKET_LEN {
+                if line.len() + bytes.len() + 1 < MAX_UDP_PACKET_LEN {
                     bytes.extend_from_slice(&line[..]);
                     bytes.push(b'\n');
                 } else {
-                    try!(socket.send_to(&bytes[..], addr));
+                    try!(socket.send_to(&bytes[..], *addr));
                     bytes.clear();
                     bytes.extend_from_slice(&line[..]);
                     bytes.push(b'\n');
                 }
             }
             if !bytes.is_empty() {
-                try!(socket.send_to(&bytes[..], addr));
+                try!(socket.send_to(&bytes[..], *addr));
             }
         }
 
