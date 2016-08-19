@@ -1,12 +1,16 @@
 extern crate influent;
 
 use std::io::prelude::*;
+#[cfg(feature = "http")]
 use influent::create_client;
 use influent::client::{Client, Credentials};
+#[cfg(feature = "http")]
 use influent::client::http::HttpClient;
+#[cfg(feature = "http")]
 use influent::hurl::hyper::HyperHurl;
 use influent::measurement::{Measurement, Value};
 
+#[cfg(feature = "http")]
 fn before<'a>() -> HttpClient<'a> {
 	let credentials = Credentials {
         username: "gobwas",
@@ -22,6 +26,7 @@ fn before<'a>() -> HttpClient<'a> {
     client
 }
 
+#[cfg(feature = "http")]
 #[test]
 fn test_write_measurement() {
     let mut client = before();
