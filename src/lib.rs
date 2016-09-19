@@ -8,6 +8,7 @@ pub mod hurl;
 pub mod serializer;
 pub mod measurement;
 
+use std::borrow::Borrow;
 use client::{Client, Credentials};
 use client::udp::UdpClient;
 #[cfg(feature = "http")]
@@ -37,7 +38,7 @@ use serializer::line::LineSerializer;
 /// let client = create_client(credentials, vec!["http://localhost:8086"]);
 /// ```
 #[cfg(feature = "http")]
-pub fn create_client<'a>(credentials: Credentials<'a>, hosts: Vec<&'a str>) -> HttpClient<'a> {
+pub fn create_client<'a,S: Borrow<str>>(credentials: Credentials<'a>, hosts: Vec<&'a str>) -> HttpClient<'a,S> {
     let mut client = HttpClient::new(credentials, Box::new(LineSerializer::new()), Box::new(HyperHurl::new()));
 
     for host in hosts {
@@ -55,7 +56,7 @@ pub fn create_client<'a>(credentials: Credentials<'a>, hosts: Vec<&'a str>) -> H
 /// use influent::create_udp_client;
 /// let client = create_udp_client(vec!["127.0.0.1:8089"]);
 /// ```
-pub fn create_udp_client<'a>(hosts: Vec<&'a str>) -> UdpClient<'a> {
+pub fn create_udp_client<'a,S: Borrow<str>>(hosts: Vec<&'a str>) -> UdpClient<'a,S> {
     let mut client = UdpClient::new(Box::new(LineSerializer::new()));
 
     for host in hosts {

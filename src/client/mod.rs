@@ -1,13 +1,14 @@
 use ::measurement::Measurement;
 use std::io;
+use std::borrow::Borrow;
 
 #[cfg(feature = "http")]
 pub mod http;
 pub mod udp;
 
-pub trait Client {
-    fn write_many(&self, &[Measurement], Option<Precision>) -> ClientWriteResult;
-    fn write_one(&self, Measurement, Option<Precision>) -> ClientWriteResult;
+pub trait Client<S: Borrow<str>> {
+    fn write_many(&self, &[Measurement<S>], Option<Precision>) -> ClientWriteResult;
+    fn write_one(&self, Measurement<S>, Option<Precision>) -> ClientWriteResult;
     fn query(&self, String, Option<Precision>) -> ClientReadResult;
 }
 

@@ -3,6 +3,7 @@ use ::serializer::Serializer;
 use ::client::{Precision, Client, Credentials, ClientError, ClientReadResult, ClientWriteResult};
 use ::hurl::{Hurl, Request, Response, Method, Auth};
 use std::collections::HashMap;
+use std::borrow::Borrow;
 
 const MAX_BATCH: u16 = 5000;
 
@@ -20,16 +21,16 @@ pub struct Options {
     pub chunk_size: Option<u16>
 }
 
-pub struct HttpClient<'a> {
+pub struct HttpClient<'a,S> {
     credentials: Credentials<'a>,
-    serializer: Box<Serializer>,
+    serializer: Box<Serializer<S>>,
     hurl: Box<Hurl>,
     hosts: Vec<&'a str>,
     pub max_batch: u16
 }
 
-impl<'a> HttpClient<'a> {
-    pub fn new(credentials: Credentials<'a>, serializer: Box<Serializer>, hurl: Box<Hurl>) -> HttpClient<'a> {
+impl<'a,S: Borrow<str>> HttpClient<'a,S> {
+    pub fn new(credentials: Credentials<'a>, serializer: Box<Serializer<S>>, hurl: Box<Hurl>) -> Self {
         HttpClient {
             credentials: credentials,
             serializer: serializer,
@@ -51,7 +52,7 @@ impl<'a> HttpClient<'a> {
     }
 }
 
-impl<'a> Client for HttpClient<'a> {
+impl<'a,S:Borrow<str>> Client<S> for HttpClient<'a,S> {
     fn query(&self, q: String, epoch: Option<Precision>) -> ClientReadResult {
         let host = self.get_host();
 
@@ -85,11 +86,11 @@ impl<'a> Client for HttpClient<'a> {
         }
     }
 
-    fn write_one(&self, measurement: Measurement, precision: Option<Precision>) -> ClientWriteResult {
+    fn write_one(&self, measurement: Measurement<S>, precision: Option<Precision>) -> ClientWriteResult {
         self.write_many(&[measurement], precision)
     }
 
-    fn write_many(&self, measurements: &[Measurement], precision: Option<Precision>) -> ClientWriteResult {
+    fn write_many(&self, measurements: &[Measurement<S>], precision: Option<Precision>) -> ClientWriteResult {
         let host = self.get_host();
 
         for chunk in measurements.chunks(self.max_batch as usize) {
@@ -145,6 +146,8 @@ mod tests {
     use ::measurement::Measurement;
     use std::cell::Cell;
     use std::clone::Clone;
+    use std::borrow::Borrow;
+    use std::fmt::Debug;
 
     const serialized : &'static str = "serialized";
 
@@ -160,8 +163,8 @@ mod tests {
         }
     }
 
-    impl Serializer for MockSerializer {
-        fn serialize(&self, measurement: &Measurement) -> String {
+    impl<S: Borrow<str> + Debug> Serializer<S> for MockSerializer {
+        fn serialize(&self, measurement: &Measurement<S>) -> String {
             println!("serializing: {:?}", measurement);
             self.serialize_count.set(self.serialize_count.get() + 1);
             serialized.to_string()
@@ -191,7 +194,7 @@ mod tests {
         }
     }
 
-    fn before<'a>(result: Box<Fn() -> HurlResult>) -> HttpClient<'a> {        
+    fn before<'a,S: Borrow<str> + Debug>(result: Box<Fn() -> HurlResult>) -> HttpClient<'a,S> {        
         let credentials = Credentials {
             username: "gobwas",
             password: "1234",

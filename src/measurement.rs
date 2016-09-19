@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
+use std::borrow::Borrow;
 
 #[derive(Debug)]
 /// Measurement's field value.
-pub enum Value<'a> {
+pub enum Value<S: Borrow<str>> {
     /// String.
-    String(&'a str),
+    String(S),
     /// Floating point number.
     Float(f64),
     /// Integer number.
@@ -15,7 +16,7 @@ pub enum Value<'a> {
 
 /// Measurement model.
 #[derive(Debug)]
-pub struct Measurement<'a> {
+pub struct Measurement<'a,S: Borrow<str>> {
     /// Key.
     pub key: &'a str,
 
@@ -23,13 +24,13 @@ pub struct Measurement<'a> {
     pub timestamp: Option<i64>,
 
     /// Map of fields.
-    pub fields: BTreeMap<&'a str, Value<'a>>,
+    pub fields: BTreeMap<&'a str, Value<S>>,
     
     /// Map of tags.
-    pub tags: BTreeMap<&'a str, &'a str>
+    pub tags: BTreeMap<&'a str, S>
 }
 
-impl<'a> Measurement<'a> {
+impl<'a,S> Measurement<'a,S> where S: Borrow<str> {
     /// Constructs a new `Measurement`.
     ///
     /// # Examples
@@ -39,7 +40,7 @@ impl<'a> Measurement<'a> {
     ///
     /// let measurement = Measurement::new("key");
     /// ```
-    pub fn new(key: &str) -> Measurement {
+    pub fn new(key: &'a str) -> Self {
         Measurement {
             key: key,
             timestamp: None,
@@ -59,7 +60,7 @@ impl<'a> Measurement<'a> {
     ///
     /// measurement.add_field("field", Value::String("hello"));
     /// ```
-    pub fn add_field(&mut self, field: &'a str, value: Value<'a>) {
+    pub fn add_field(&mut self, field: &'a str, value: Value<S>) {
         self.fields.insert(field, value);
     }
 
@@ -74,7 +75,7 @@ impl<'a> Measurement<'a> {
     ///
     /// measurement.add_tag("tag", "value");
     /// ```
-    pub fn add_tag(&mut self, tag: &'a str, value: &'a str) {
+    pub fn add_tag(&mut self, tag: &'a str, value: S) {
         self.tags.insert(tag, value);
     }
 

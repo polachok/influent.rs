@@ -4,6 +4,7 @@ extern crate test;
 use ::measurement::{Measurement, Value};
 use ::serializer::Serializer;
 use std::io::{self,Cursor,Write};
+use std::borrow::Borrow;
 use std::fmt;
 
 pub struct LineSerializer;
@@ -58,7 +59,7 @@ impl LineSerializer {
         Ok(written)
     }
 
-    fn write_escaped_value(w: &mut Write, value: &Value) -> io::Result<usize> {
+    fn write_escaped_value<S: Borrow<str>>(w: &mut Write, value: &Value<S>) -> io::Result<usize> {
         let mut written = 0;
         match value {
             // Strings are text values. All string values must be
@@ -67,7 +68,7 @@ impl LineSerializer {
             // it must be escaped with a backslash, e.g. \". 
             &Value::String(ref s)  => {
                 written += try!(w.write(&[b'"']));
-                for byte in s.as_bytes() {
+                for byte in s.borrow().as_bytes() {
                     if *byte == b'"' {
                         written += try!(w.write(b"\\\""));
                     } else {
@@ -92,23 +93,23 @@ impl LineSerializer {
         Ok(written)
     }
 
-    fn serialize_buf(&self, measurement: &Measurement) -> Vec<u8> {
+    fn serialize_buf<S: Borrow<str>>(&self, measurement: &Measurement<S>) -> Vec<u8> {
         use std::io::Cursor;
         let mut buf = Vec::new();
         {
             let mut cur = Cursor::new(buf);
-            Self::write_escaped_key(&mut cur, measurement.key);
+            Self::write_escaped_key(&mut cur, measurement.key.borrow());
             for (tag, value) in measurement.tags.iter() {
                 cur.write(b",");
                 Self::write_escaped_tag(&mut cur, tag);
                 cur.write(b"=");
-                Self::write_escaped_tag(&mut cur, value);
+                Self::write_escaped_tag(&mut cur, value.borrow());
             }
            
             let mut first = true;
             for (field, value) in measurement.fields.iter() {
                 if first { first = false; cur.write(b" ") } else { cur.write(b",") };
-                Self::write_escaped_tag(&mut cur, field);
+                Self::write_escaped_tag(&mut cur, field.borrow());
                 cur.write(b"=");
                 Self::write_escaped_value(&mut cur, value);
             }
@@ -145,26 +146,26 @@ fn as_boolean(b: &bool) -> String {
     if *b { "t".to_string() } else { "f".to_string() }
 }
 
-impl Serializer for LineSerializer {
-    fn serialize(&self, measurement: &Measurement) -> String {
-        let mut line = vec![escape(measurement.key)];
+impl<S: Borrow<str>> Serializer<S> for LineSerializer {
+    fn serialize(&self, measurement: &Measurement<S>) -> String {
+        let mut line = vec![escape(measurement.key.borrow())];
 
         for (tag, value) in measurement.tags.iter() {
             line.push(",".to_string());
             line.push(escape(tag));
             line.push("=".to_string());
-            line.push(escape(value));
+            line.push(escape(value.borrow()));
         }
 
         let mut was_spaced = false;
 
         for (field, value) in measurement.fields.iter() {
             line.push({if !was_spaced { was_spaced = true; " " } else { "," }}.to_string());
-            line.push(escape(field));
+            line.push(escape(field.borrow()));
             line.push("=".to_string());
 
             match value {
-                &Value::String(ref s)  => line.push(as_string(s)),
+                &Value::String(ref s)  => line.push(as_string(s.borrow())),
                 &Value::Integer(ref i) => line.push(as_integer(i)),
                 &Value::Float(ref f)   => line.push(as_float(f)),
                 &Value::Boolean(ref b) => line.push(as_boolean(b))

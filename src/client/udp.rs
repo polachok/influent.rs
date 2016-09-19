@@ -2,6 +2,7 @@ use ::measurement::Measurement;
 use ::serializer::Serializer;
 use ::client::{Precision, Client, Credentials, ClientError, ClientReadResult, ClientWriteResult};
 use std::net::{UdpSocket, ToSocketAddrs};
+use std::borrow::Borrow;
 
 const MAX_BATCH: u16 = 5000;
 
@@ -19,14 +20,14 @@ pub struct Options {
     pub chunk_size: Option<u16>
 }
 
-pub struct UdpClient<'a> {
-    serializer: Box<Serializer>,
+pub struct UdpClient<'a,S: Borrow<str>> {
+    serializer: Box<Serializer<S>>,
     hosts: Vec<&'a str>,
     pub max_batch: u16
 }
 
-impl<'a> UdpClient<'a> {
-    pub fn new(serializer: Box<Serializer>) -> Self {
+impl<'a,S: Borrow<str>> UdpClient<'a,S> {
+    pub fn new(serializer: Box<Serializer<S>>) -> Self {
         UdpClient {
             serializer: serializer,
             hosts: vec![],
@@ -46,16 +47,16 @@ impl<'a> UdpClient<'a> {
     }
 }
 
-impl<'a> Client for UdpClient<'a> {
+impl<'a,S: Borrow<str>> Client<S> for UdpClient<'a,S> {
     fn query(&self, _: String, _: Option<Precision>) -> ClientReadResult {
         Err(ClientError::CouldNotComplete("querying is not supported over UDP".to_string()))
     }
 
-    fn write_one(&self, measurement: Measurement, precision: Option<Precision>) -> ClientWriteResult {
+    fn write_one(&self, measurement: Measurement<S>, precision: Option<Precision>) -> ClientWriteResult {
         self.write_many(&[measurement], precision)
     }
 
-    fn write_many(&self, measurements: &[Measurement], _: Option<Precision>) -> ClientWriteResult {
+    fn write_many(&self, measurements: &[Measurement<S>], _: Option<Precision>) -> ClientWriteResult {
         let socket = try!(UdpSocket::bind("0.0.0.0:0"));
         let addr = self.get_host().to_socket_addrs().unwrap().last().unwrap();
 
