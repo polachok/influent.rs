@@ -1,5 +1,10 @@
+#![feature(test)]
+
+extern crate test;
 use ::measurement::{Measurement, Value};
 use ::serializer::Serializer;
+use std::io::{self,Cursor,Write};
+use std::fmt;
 
 pub struct LineSerializer;
 
@@ -24,6 +29,97 @@ impl LineSerializer {
     /// ```
     pub fn new() -> LineSerializer {
         LineSerializer
+    }
+
+    // Measurement names must escape commas and spaces.
+    fn write_escaped_key(w: &mut Write, key: &str) -> io::Result<usize> {
+        let mut written = 0;
+        for byte in key.as_bytes() {
+            written += match *byte {
+                b',' => try!(w.write(b"\\,")),
+                b' ' => try!(w.write(b"\\ ")),
+                _ => try!(w.write(&[*byte])),
+            }
+        }
+        Ok(written)
+    }
+
+    // Tag keys and tag values must escape commas, spaces, and equal signs. 
+    fn write_escaped_tag(w: &mut Write, tag: &str) -> io::Result<usize> {
+        let mut written = 0;
+        for byte in tag.as_bytes() {
+            written += match *byte {
+                b',' => try!(w.write(b"\\,")),
+                b' ' => try!(w.write(b"\\ ")),
+                b'=' => try!(w.write(b"\\ ")),
+                _ => try!(w.write(&[*byte])),
+            }
+        }
+        Ok(written)
+    }
+
+    fn write_escaped_value(w: &mut Write, value: &Value) -> io::Result<usize> {
+        let mut written = 0;
+        match value {
+            // Strings are text values. All string values must be
+            // surrounded in double-quotes ".
+            // If the string contains a double-quote,
+            // it must be escaped with a backslash, e.g. \". 
+            &Value::String(ref s)  => {
+                written += try!(w.write(&[b'"']));
+                for byte in s.as_bytes() {
+                    if *byte == b'"' {
+                        written += try!(w.write(b"\\\""));
+                    } else {
+                        written += try!(w.write(&[*byte]));
+                    }
+                }
+                try!(w.write(b"\""));
+            },
+            // Integers are numeric values that do not include a decimal
+            // and are followed by a trailing i when inserted
+            &Value::Integer(ref i) => {
+                written += try!(w.write(i.to_string().as_bytes()));
+                written += try!(w.write(b"i"));
+            },
+            &Value::Float(ref f) => {
+                written += try!(w.write(f.to_string().as_bytes()));
+            }, 
+            &Value::Boolean(ref b) => {
+                written += try!(w.write(if *b { b"t" } else { b"f" }));
+            },
+        };
+        Ok(written)
+    }
+
+    fn serialize_buf(&self, measurement: &Measurement) -> Vec<u8> {
+        use std::io::Cursor;
+        let mut buf = Vec::new();
+        {
+            let mut cur = Cursor::new(buf);
+            Self::write_escaped_key(&mut cur, measurement.key);
+            for (tag, value) in measurement.tags.iter() {
+                cur.write(b",");
+                Self::write_escaped_tag(&mut cur, tag);
+                cur.write(b"=");
+                Self::write_escaped_tag(&mut cur, value);
+            }
+           
+            let mut first = true;
+            for (field, value) in measurement.fields.iter() {
+                if first { first = false; cur.write(b" ") } else { cur.write(b",") };
+                Self::write_escaped_tag(&mut cur, field);
+                cur.write(b"=");
+                Self::write_escaped_value(&mut cur, value);
+            }
+
+            if let Some(ts) = measurement.timestamp {
+                cur.write(b" ");
+                cur.write(ts.to_string().as_bytes());
+            }
+
+            cur.into_inner()
+        }
     }
 }
 
@@ -89,7 +185,7 @@ impl Serializer for LineSerializer {
 
 #[cfg(test)]
 mod tests {
-    use super::{as_boolean, as_string, as_integer, as_float, escape, LineSerializer};
+    use super::{as_boolean, as_string, as_integer, as_float, escape, LineSerializer, test};
     use ::serializer::Serializer;
     use ::measurement::{Measurement, Value};
 
@@ -125,6 +221,80 @@ mod tests {
         assert_eq!("\\ ", escape(" "));
         assert_eq!("\\,", escape(","));
         assert_eq!("hello\\,\\ gobwas", escape("hello, gobwas"));
+    }
+
+
+    #[test]
+    fn test_line_serializer_2() {
+        let serializer = LineSerializer::new();
+        let mut measurement = Measurement::new("key");
+
+        measurement.add_field("s", Value::String("string"));
+        measurement.add_field("i", Value::Integer(10));
+        measurement.add_field("f", Value::Float(10f64));
+        measurement.add_field("b", Value::Boolean(false));
+
+        measurement.add_tag("tag", "value");
+        
+        measurement.add_field("one, two", Value::String("three"));
+        measurement.add_tag("one ,two", "three, four");
+
+
+        measurement.set_timestamp(10);
+
+        let shit = String::from_utf8(serializer.serialize_buf(&measurement)).unwrap();
+        assert_eq!("key,one\\ \\,two=three\\,\\ four,tag=value b=f,f=10,i=10i,one\\,\\ two=\"three\",s=\"string\" 10", shit);
+    }
+
+    fn do_serialize() {
+        let serializer = LineSerializer::new();
+        let mut measurement = Measurement::new("key");
+
+        measurement.add_field("s", Value::String("string"));
+        measurement.add_field("i", Value::Integer(10));
+        measurement.add_field("f", Value::Float(10f64));
+        measurement.add_field("b", Value::Boolean(false));
+
+        measurement.add_tag("tag", "value");
+        
+        measurement.add_field("one, two", Value::String("three"));
+        measurement.add_tag("one ,two", "three, four");
+
+
+        measurement.set_timestamp(10);
+
+        assert_eq!("key,one\\ \\,two=three\\,\\ four,tag=value b=f,f=10,i=10i,one\\,\\ two=\"three\",s=\"string\" 10", serializer.serialize(&measurement));
+    }
+
+    fn do_serialize_buf() {
+        let serializer = LineSerializer::new();
+        let mut measurement = Measurement::new("key");
+
+        measurement.add_field("s", Value::String("string"));
+        measurement.add_field("i", Value::Integer(10));
+        measurement.add_field("f", Value::Float(10f64));
+        measurement.add_field("b", Value::Boolean(false));
+
+        measurement.add_tag("tag", "value");
+        
+        measurement.add_field("one, two", Value::String("three"));
+        measurement.add_tag("one ,two", "three, four");
+
+
+        measurement.set_timestamp(10);
+
+        let shit = String::from_utf8(serializer.serialize_buf(&measurement)).unwrap();
+        assert_eq!("key,one\\ \\,two=three\\,\\ four,tag=value b=f,f=10,i=10i,one\\,\\ two=\"three\",s=\"string\" 10", shit);
+    }
+
+    #[bench]
+    fn bench_serialize(b: &mut test::Bencher) {
+        b.iter(|| do_serialize())
+    }
+
+    #[bench]
+    fn bench_my_serialize(b: &mut test::Bencher) {
+        b.iter(|| do_serialize_buf())
     }
 
     #[test]
