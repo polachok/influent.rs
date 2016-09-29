@@ -148,39 +148,8 @@ fn as_boolean(b: &bool) -> String {
 
 impl<S: Borrow<str>> Serializer<S> for LineSerializer {
     fn serialize(&self, measurement: &Measurement<S>) -> String {
-        let mut line = vec![escape(measurement.key.borrow())];
-
-        for (tag, value) in measurement.tags.iter() {
-            line.push(",".to_string());
-            line.push(escape(tag));
-            line.push("=".to_string());
-            line.push(escape(value.borrow()));
-        }
-
-        let mut was_spaced = false;
-
-        for (field, value) in measurement.fields.iter() {
-            line.push({if !was_spaced { was_spaced = true; " " } else { "," }}.to_string());
-            line.push(escape(field.borrow()));
-            line.push("=".to_string());
-
-            match value {
-                &Value::String(ref s)  => line.push(as_string(s.borrow())),
-                &Value::Integer(ref i) => line.push(as_integer(i)),
-                &Value::Float(ref f)   => line.push(as_float(f)),
-                &Value::Boolean(ref b) => line.push(as_boolean(b))
-            };
-        }
-
-        match measurement.timestamp {
-            Some(t) => {
-                line.push(" ".to_string());
-                line.push(t.to_string());
-            }
-            _ => {}
-        }
-
-        line.join("")
+        let v = self.serialize_buf(measurement);
+        String::from_utf8(v).unwrap()
     }
 }
 
